@@ -1,3 +1,4 @@
+package src;
 // HTMLParser Library $Name: v1_6 $ - A java-based parser for HTML
 // http://sourceforge.org/projects/htmlparser
 // Copyright (C) 2004 Somik Raha

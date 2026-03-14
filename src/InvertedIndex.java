@@ -1,3 +1,4 @@
+package src;
 /* --
 COMP336 Lab1 Exercise
 Student Name:

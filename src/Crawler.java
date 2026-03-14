@@ -1,3 +1,4 @@
+package src;
 /* --
 COMP4321 Lab2 Exercise
 Student Name:

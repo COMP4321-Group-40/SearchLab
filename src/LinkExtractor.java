@@ -3,7 +3,7 @@
 // Copyright (C) 2012 Pengfei Zhao
 //
 //
-package Lab;
+package src;
 
 import java.net.URL;
 import java.util.Vector;
