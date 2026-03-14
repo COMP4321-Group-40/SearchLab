@@ -1,11 +1,5 @@
 package src;
-/* --
-COMP4321 Lab2 Exercise
-Student Name:
-Student ID:
-Section:
-Email:
-*/
+
 import java.util.Vector;
 import org.htmlparser.beans.StringBean;
 import org.htmlparser.Node;
