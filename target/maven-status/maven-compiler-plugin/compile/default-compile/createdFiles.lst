@@ -1,0 +1,9 @@
+com\crawler\InvertedIndex.class
+com\crawler\Main.class
+com\crawler\TestLinks$LinkInfo.class
+com\crawler\InvertedIndex$DocumentInfo.class
+com\crawler\Crawler.class
+com\crawler\StopStem.class
+com\crawler\TestLinks.class
+com\crawler\TestLinks$TestResult.class
+com\crawler\InvertedIndex$SearchResult.class
