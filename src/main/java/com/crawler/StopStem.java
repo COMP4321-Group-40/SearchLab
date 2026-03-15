@@ -4,7 +4,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -54,10 +57,10 @@ public class StopStem {
         logger.info("Added {} default stop words", stopWords.size());
     }
     
-    public String process(String text) {
-        // Process the text itself
+    public List<StemPosition> process(String text){
+        // Process the text and return a list of stems with positions
         if (text == null || text.isEmpty()) {
-            return "";
+            return Collections.emptyList();
         }
         
         // Split into words, remove punctuation, and convert to lowercase
@@ -65,18 +68,20 @@ public class StopStem {
                 .replaceAll("[^a-zA-Z\\s]", " ")
                 .split("\\s+");
         
-        StringBuilder result = new StringBuilder();
+        List<StemPosition> result = new ArrayList<>();
+        int position = 0;
         
         for (String word : words) {
             if (!word.isEmpty() && !isStopWord(word)) {
                 String stemmed = stemmer.stripAffixes(word);
                 if(!stemmed.isEmpty()){
-                    result.append(stemmed).append(" ");
+                    result.add(new StemPosition(stemmed, position));
                 }
             }
+            position++;
         }
         
-        return result.toString().trim();
+        return result;
     }
     
     private boolean isStopWord(String word) {
@@ -85,5 +90,15 @@ public class StopStem {
     
     public Set<String> getStopWords() {
         return new HashSet<>(stopWords);
+    }
+
+    public static class StemPosition {
+        public final String stem;
+        public final int position;
+        
+        public StemPosition(String stem, int position) {
+            this.stem = stem;
+            this.position = position;
+        }
     }
 }

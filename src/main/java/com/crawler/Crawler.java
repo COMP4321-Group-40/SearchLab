@@ -2,6 +2,7 @@ package com.crawler;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -25,11 +26,13 @@ public class Crawler
 	private final String userAgent = "Mozilla/5.0 (compatible; AcademicCrawler/1.0)";
 
 	private final int timeout = 10000;
-    private int pagesCrawled = 0;
+    private int pagesCrawled;
 
 	public Crawler(StopStem stopStem, InvertedIndex invertedIndex) {
         this.stopStem = stopStem;
         this.invertedIndex = invertedIndex;
+
+        pagesCrawled = 0;
     }
     
     public void crawl(String url, int maxPages) {
@@ -85,16 +88,17 @@ public class Crawler
             title = "No title";
         }
         
-        // Extract text 
-        String text = document.body().text();
+        // Extract title text and process
+        List<StopStem.StemPosition> titleStems = stopStem.process(title);
         
-        // Process text through stopwords and stemming
-        String processedText = stopStem.process(text);
+        // Extract body text and process
+        String bodyText = document.body().text();
+        List<StopStem.StemPosition> bodyStems = stopStem.process(bodyText);
         
         // Add to inverted index
-        invertedIndex.addDocument(url, title, processedText);
+        invertedIndex.addDocument(url, title, titleStems, bodyStems);
         
-        logger.debug("Indexed: {} - {} words", title, processedText.split("\\s+").length);
+        logger.debug("Indexed: {} - {} words", title, bodyStems.size(), titleStems.size());
     }
     
     private boolean isValidUrl(String url) {

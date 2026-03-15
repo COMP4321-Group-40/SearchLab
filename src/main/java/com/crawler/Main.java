@@ -55,7 +55,7 @@ public class Main {
         System.out.println("           CRAWL SUMMARY         ");
         System.out.println("=================================");
         System.out.println("Pages crawled: " + crawler.getCrawledUrls().size());
-        System.out.println("Unique words indexed: " + invertedIndex.getWordCount());
+        System.out.println("Unique body stemsd: " + invertedIndex.getWordCount());
         System.out.println("Total word occurrences: " + invertedIndex.getTotalOccurrences());
         
         // Show top 10 most frequent words
@@ -79,7 +79,17 @@ public class Main {
             }
             
             if (!query.isEmpty()) {
-                List<InvertedIndex.SearchResult> results = invertedIndex.search(query);
+                boolean isPhrase = query.contains(" ");
+                
+                List<InvertedIndex.SearchResult> results;
+                if (isPhrase) {
+                    // Phrase search in both title and body
+                    results = invertedIndex.searchPhrase(query, true, true);
+                    System.out.println("Performing phrase search...");
+                } else {
+                    // Single term search in both
+                    results = invertedIndex.search(query, true, true);
+                }
                 
                 if (results.isEmpty()) {
                     System.out.println("No results found for '" + query + "'");
