@@ -25,29 +25,31 @@ public class Crawler
 	private final String userAgent = "Mozilla/5.0 (compatible; AcademicCrawler/1.0)";
 
 	private final int timeout = 10000;
+    private int pagesCrawled = 0;
 
 	public Crawler(StopStem stopStem, InvertedIndex invertedIndex) {
         this.stopStem = stopStem;
         this.invertedIndex = invertedIndex;
     }
     
-    public void crawl(String url, int pagesCrawled, int maxPages) {
+    public void crawl(String url, int maxPages) {
         // Main web crawler loop 
         // Does a BFS search starting from the current url
 
         visited.add(url);
+        pagesCrawled++;
         
         if (pagesCrawled < maxPages) {
-            
             try {
-                logger.info("Crawling ({}/{}): {}", pagesCrawled + 1, maxPages, url);
+                logger.info("Crawling ({}/{}): {}", pagesCrawled, maxPages, url);
                 
                 // Try to request a valid connection and document from the page
                 Connection con = getConnection(url);
+                Connection.Response res = con.execute();
                 
-                if (con.response().statusCode() == 200){
+                if (res.statusCode() == 200){
                     // If the connection is valid, we retrieve its information
-                    Document doc = con.get();
+                    Document doc = res.parse();
                     if (doc != null) {
                         processPage(url, doc);
 
@@ -58,9 +60,8 @@ public class Crawler
                             String nextlink = link.absUrl("href");
                             
                             if (isValidUrl(nextlink) && !visited.contains(nextlink)) {
-                                visited.add(nextlink);
                                 logger.debug("Found new link: {}", nextlink);
-                                crawl(nextlink,pagesCrawled+1,maxPages); // Recurse
+                                crawl(nextlink,maxPages); // Recurse
                             }
                         }
                     }
@@ -69,8 +70,6 @@ public class Crawler
                 logger.error("Error crawling at {}: {}",  url, e.getMessage());
             }
         }
-        
-        logger.info("Crawling complete. Visited {} pages", visited.size());
     }
 
     private Connection getConnection(String url) throws IOException {

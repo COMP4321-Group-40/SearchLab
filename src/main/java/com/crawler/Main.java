@@ -27,7 +27,6 @@ public class Main {
             Scanner scanner = new Scanner(System.in);
             System.out.print("\nEnter starting URL (or press Enter for default): ");
             String startUrl = scanner.nextLine().trim();
-            scanner.close();
             
             System.out.print("Enter maximum pages to crawl (default: 30): ");
             String maxPagesInput = scanner.nextLine().trim();
@@ -35,13 +34,15 @@ public class Main {
             
                 
             // Start crawling
-            crawler.crawl(startUrl, 0, maxPages);
+            crawler.crawl(startUrl, maxPages);
             
             // Display results
             displayResults(invertedIndex, crawler);
             
             // Search interface
             runSearchInterface(scanner, invertedIndex);
+
+            scanner.close();
             
         } catch (Exception e) {
             logger.error("Application error: ", e);
