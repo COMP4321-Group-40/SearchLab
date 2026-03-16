@@ -1,16 +1,14 @@
 package com.crawler;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 // Inverted index for storing and searching crawled documents.
 public class InvertedIndex {
@@ -22,14 +20,101 @@ public class InvertedIndex {
     
     // Document metadata
     private final Map<String, DocumentInfo> documents = new ConcurrentHashMap<>();
+
+
+    // Page relationships
+    private final AtomicInteger nextPageId = new AtomicInteger(1);
+    private final Map<String, Integer> urlToId = new ConcurrentHashMap<>();
+    private final Map<Integer, String> idToUrl = new ConcurrentHashMap<>();
+    
+    // Last modified times (epoch milliseconds)
+    private final Map<Integer, Long> lastModified = new ConcurrentHashMap<>();
+    
+    // Parent-child relationships: parentId -> Set of childIds
+    private final Map<Integer, Set<Integer>> parentToChildren = new ConcurrentHashMap<>();
+    // Child-parent relationships: childId -> Set of parentIds
+    private final Map<Integer, Set<Integer>> childToParents = new ConcurrentHashMap<>();
+
+    private final Map<String, Integer> docMaxTfBody = new ConcurrentHashMap<>();
+    private final Map<String, Integer> docMaxTfTitle = new ConcurrentHashMap<>();
     
     private int totalDocuments = 0;
+
+    public int getPageId(String url) {
+        return urlToId.computeIfAbsent(url, k -> {
+            int id = nextPageId.getAndIncrement();
+            idToUrl.put(id, url);
+            return id;
+        });
+    }
+
+    public String getUrl(int pageId) {
+        return idToUrl.get(pageId);
+    }
+
+    public boolean containsUrl(String url) {
+        return documents.containsKey(url);
+    }
+
+    public Long getLastModified(String url) {
+        Integer id = urlToId.get(url);
+        return id != null ? lastModified.get(id) : null;
+    }
+
+    public void setLastModified(String url, long timestamp) {
+        Integer id = urlToId.get(url);
+        if (id != null) {
+            lastModified.put(id, timestamp);
+        }
+    }
+
+    // ===== Link Graph =====
+
+    public void addLinkRelation(String parentUrl, String childUrl) {
+        int parentId = getPageId(parentUrl);
+        int childId = getPageId(childUrl);
+        
+        parentToChildren.computeIfAbsent(parentId, k -> ConcurrentHashMap.newKeySet()).add(childId);
+        childToParents.computeIfAbsent(childId, k -> ConcurrentHashMap.newKeySet()).add(parentId);
+    }
+
+    public Set<Integer> getChildren(int pageId) {
+        return parentToChildren.getOrDefault(pageId, Collections.emptySet());
+    }
     
-    public void addDocument(String url, String title, List<StopStem.StemPosition> titleStems, List<StopStem.StemPosition> bodyStems) {
+    public Set<Integer> getParents(int pageId) {
+        return childToParents.getOrDefault(pageId, Collections.emptySet());
+    }
+
+        public Set<Integer> getAllPageIds() {
+        return idToUrl.keySet();
+    }
+
+    // ===== Indexing =====
+    
+    public void addDocument(String url, String title, List<StopStem.StemPosition> titleStems, List<StopStem.StemPosition> bodyStems, long lastModifiedTime) {
+        int pageId = getPageId(url);
+        lastModified.put(pageId, lastModifiedTime);
+        
         indexStems(bodyIndex, url, bodyStems);
         indexStems(titleIndex, url, titleStems);
 
         documents.put(url, new DocumentInfo(url, title, bodyStems.size(), titleStems.size()));
+
+        Map<String, Integer> bodyFreq = new HashMap<>();
+        for (StopStem.StemPosition sp : bodyStems) {
+            bodyFreq.merge(sp.stem, 1, Integer::sum);
+        }
+        int maxBodyTf = bodyFreq.values().stream().mapToInt(Integer::intValue).max().orElse(1);
+        docMaxTfBody.put(url, maxBodyTf);
+        
+        // Compute max term frequencies for title
+        Map<String, Integer> titleFreq = new HashMap<>();
+        for (StopStem.StemPosition sp : titleStems) {
+            titleFreq.merge(sp.stem, 1, Integer::sum);
+        }
+        int maxTitleTf = titleFreq.values().stream().mapToInt(Integer::intValue).max().orElse(1);
+        docMaxTfTitle.put(url, maxTitleTf);
 
         totalDocuments++;
     }
@@ -50,168 +135,15 @@ public class InvertedIndex {
         }
     }
     
-    public List<SearchResult> search(String query, boolean searchTitle, boolean searchBody) {
-
-        if (query == null || query.trim().isEmpty()) {
-            return Collections.emptyList();
+    private int computeMaxTf(List<StopStem.StemPosition> stems) {
+        Map<String, Integer> freq = new HashMap<>();
+        for (StopStem.StemPosition sp : stems) {
+            freq.merge(sp.stem, 1, Integer::sum);
         }
-        
-        String[] terms = query.toLowerCase().split("\\s+");
-        if (terms.length == 1) {
-            return searchSingleTerm(terms[0], searchTitle, searchBody);
-        } else {
-            // For multiple terms, treat as phrase search
-            return searchPhrase(query, searchTitle, searchBody);
-        }
+        return freq.values().stream().mapToInt(Integer::intValue).max().orElse(1);
     }
 
-        private List<SearchResult> searchSingleTerm(String term, boolean searchTitle, boolean searchBody) {
-            Map<String, Double> scores = new HashMap<>();
-            
-            if (searchTitle) {
-                addTermScores(titleIndex, term, scores, true);
-            }
-            if (searchBody) {
-                addTermScores(bodyIndex, term, scores, false);
-            }
-            
-            return scores.entrySet().stream()
-                .map(entry -> new SearchResult(
-                    entry.getKey(),
-                    documents.get(entry.getKey()).getTitle(),
-                    entry.getValue()
-                ))
-                .sorted((a, b) -> Double.compare(b.getScore(), a.getScore()))
-                .collect(Collectors.toList());
-    }
-    
-    private void addTermScores(Map<String, Map<String, List<Integer>>> index, String term, Map<String, Double> scores, boolean isTitle) {
-        if (!index.containsKey(term)) return;
-        
-        Map<String, List<Integer>> postings = index.get(term);
-        double idf = calculateIDF(term, index);
-        
-        for (Map.Entry<String, List<Integer>> entry : postings.entrySet()) {
-            String url = entry.getKey();
-            double tf = entry.getValue().size(); // term frequency
-            double tfIdf = tf * idf;
-            
-            if (isTitle) {
-                tfIdf *= 1.5; // boost title matches
-            }
-            
-            scores.merge(url, tfIdf, Double::sum);
-        }
-    }
-    
-    private double calculateIDF(String term, Map<String, Map<String, List<Integer>>> index) {
-        double docCount = index.getOrDefault(term, Collections.emptyMap()).size();
-        if (docCount == 0) return 0;
-        return Math.log((double) totalDocuments / docCount);
-    }
-
-    public List<SearchResult> searchPhrase(String phrase, boolean searchTitle, boolean searchBody) {
-        // Split phrase into stems
-        String[] words = phrase.toLowerCase().split("\\s+");
-        String[] stems = Arrays.stream(words)
-                .map(w -> w.replaceAll("[^a-zA-Z]", ""))
-                .filter(w -> !w.isEmpty())
-                .toArray(String[]::new);
-        
-        if (stems.length == 0) return Collections.emptyList();
-        
-        Set<String> candidateDocs = new HashSet<>();
-        Map<String, Double> scores = new HashMap<>();
-        
-        if (searchTitle) {
-            candidateDocs.addAll(findPhraseInIndex(titleIndex, stems));
-            // For scoring, we could use term frequency in title or just count matches
-            // We'll give a fixed boost for title phrase matches
-            for (String url : candidateDocs) {
-                scores.merge(url, 2.0, Double::sum); // boost for title phrase match
-            }
-        }
-        if (searchBody) {
-            Set<String> bodyMatches = findPhraseInIndex(bodyIndex, stems);
-            candidateDocs.addAll(bodyMatches);
-            for (String url : bodyMatches) {
-                scores.merge(url, 1.0, Double::sum);
-            }
-        }
-        
-        // Build results with scores
-        List<SearchResult> results = new ArrayList<>();
-        for (String url : candidateDocs) {
-            DocumentInfo info = documents.get(url);
-            results.add(new SearchResult(url, info.getTitle(), scores.getOrDefault(url, 0.0)));
-        }
-        
-        results.sort((a, b) -> Double.compare(b.getScore(), a.getScore()));
-        return results;
-    }
-    
-    private Set<String> findPhraseInIndex(Map<String, Map<String, List<Integer>>> index, String[] stems) {
-        if (stems.length == 0) return Collections.emptySet();
-        
-        // Get postings for first stem
-        Map<String, List<Integer>> firstPostings = index.get(stems[0]);
-        if (firstPostings == null) return Collections.emptySet();
-        
-        Set<String> candidates = new HashSet<>(firstPostings.keySet());
-        
-        // For each subsequent stem, filter candidates that have the stem at consecutive positions
-        for (int i = 1; i < stems.length; i++) {
-            String stem = stems[i];
-            Map<String, List<Integer>> postings = index.get(stem);
-            if (postings == null) {
-                return Collections.emptySet();
-            }
-            
-            Set<String> newCandidates = new HashSet<>();
-            for (String url : candidates) {
-                List<Integer> prevPositions = firstPostings.get(url); // positions of first stem
-                List<Integer> currPositions = postings.get(url);
-                if (currPositions == null) continue;
-                
-                // Check if there exists a position p in prevPositions such that p+i is in currPositions
-                for (int pos : prevPositions) {
-                    if (currPositions.contains(pos + i)) {
-                        newCandidates.add(url);
-                        break;
-                    }
-                }
-            }
-            candidates = newCandidates;
-            firstPostings = postings; 
-
-            Map<String, List<Integer>> currentPositionsMap = new HashMap<>();
-            for (String url : candidates) {
-                currentPositionsMap.put(url, postings.get(url));
-            }
-
-            firstPostings = currentPositionsMap;
-        }
-        
-        return candidates;
-    }
-    
-    public Map<String, Integer> getTopWords(int n) {
-        // Compute term frequencies across all documents
-        Map<String, Integer> termFreq = new HashMap<>();
-        for (Map.Entry<String, Map<String, List<Integer>>> entry : bodyIndex.entrySet()) {
-            int total = entry.getValue().values().stream().mapToInt(List::size).sum();
-            termFreq.put(entry.getKey(), total);
-        }
-        return termFreq.entrySet().stream()
-                .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue()))
-                .limit(n)
-                .collect(Collectors.toMap(
-                    Map.Entry::getKey,
-                    Map.Entry::getValue,
-                    (e1, e2) -> e1,
-                    LinkedHashMap::new
-                ));
-    }
+    // ===== Statistics =====
 
     public int getWordCount() {
         return bodyIndex.size(); // unique body stems
@@ -220,8 +152,29 @@ public class InvertedIndex {
     public int getTotalOccurrences() {
         return documents.values().stream().mapToInt(DocumentInfo::getBodyLength).sum();
     }
+
+    public Map<String, Integer> getTopWords(int n) {
+        Map<String, Integer> termFreq = new HashMap<>();
+        for (Map.Entry<String, Map<String, List<Integer>>> entry : bodyIndex.entrySet()) {
+            int total = entry.getValue().values().stream().mapToInt(List::size).sum();
+            termFreq.put(entry.getKey(), total);
+        }
+        return termFreq.entrySet().stream()
+                .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue()))
+                .limit(n)
+                .collect(LinkedHashMap::new, (m, e) -> m.put(e.getKey(), e.getValue()), Map::putAll);
+    }
+
+    // ===== Getters =====
+    protected Map<String, Map<String, List<Integer>>> getBodyIndex() { return bodyIndex; }
+    protected Map<String, Map<String, List<Integer>>> getTitleIndex() { return titleIndex; }
+    protected Map<String, DocumentInfo> getDocuments() { return documents; }
+    protected Map<String, Integer> getDocMaxTfBody() { return docMaxTfBody; }
+    protected Map<String, Integer> getDocMaxTfTitle() { return docMaxTfTitle; }
+    protected int getTotalDocuments() { return totalDocuments; }
     
-    private static class DocumentInfo {
+
+    protected static class DocumentInfo {
         private final String url;
         private final String title;
         private final int bodyLength;
@@ -237,21 +190,5 @@ public class InvertedIndex {
         public String getTitle() { return title; }
         public int getBodyLength() { return bodyLength; }
         public int getTitleLength() { return titleLength; }
-    }
-
-    public static class SearchResult {
-        private final String url;
-        private final String title;
-        private final double score;
-        
-        public SearchResult(String url, String title, double score) {
-            this.url = url;
-            this.title = title;
-            this.score = score;
-        }
-        
-        public String getUrl() { return url; }
-        public String getTitle() { return title; }
-        public double getScore() { return score; }
     }
 }

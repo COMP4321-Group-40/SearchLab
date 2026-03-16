@@ -83,6 +83,17 @@ public class StopStem {
         
         return result;
     }
+
+    public String processWord(String word) {
+        if (word == null || word.isEmpty()) {
+            return "";
+        }
+        word = word.toLowerCase().replaceAll("[^a-zA-Z]", "");
+        if (word.isEmpty() || isStopWord(word)) {
+            return "";
+        }
+        return stemmer.stripAffixes(word);
+    }
     
     private boolean isStopWord(String word) {
         return stopWords.contains(word) || word.length() < 2;

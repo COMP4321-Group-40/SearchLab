@@ -21,6 +21,7 @@ public class Main {
             // Initialize components
             StopStem stopStem = new StopStem();
             InvertedIndex invertedIndex = new InvertedIndex();
+            SearchEngine searchEngine = new SearchEngine(invertedIndex, stopStem);
             Crawler crawler = new Crawler(stopStem, invertedIndex);
             
             // Get starting URL
@@ -35,13 +36,14 @@ public class Main {
                 
             // Start crawling
             crawler.crawl(startUrl, maxPages);
+            searchEngine.computeNorms();
             
             // Display results
             displayResults(invertedIndex, crawler);
             
             // Search interface
-            runSearchInterface(scanner, invertedIndex);
-
+            runSearchInterface(scanner, searchEngine);
+https://www.cse.ust.hk/~kwtleung/COMP4321/testpage.htm
             scanner.close();
             
         } catch (Exception e) {
@@ -55,7 +57,7 @@ public class Main {
         System.out.println("           CRAWL SUMMARY         ");
         System.out.println("=================================");
         System.out.println("Pages crawled: " + crawler.getCrawledUrls().size());
-        System.out.println("Unique body stemsd: " + invertedIndex.getWordCount());
+        System.out.println("Unique body stems: " + invertedIndex.getWordCount());
         System.out.println("Total word occurrences: " + invertedIndex.getTotalOccurrences());
         
         // Show top 10 most frequent words
@@ -64,7 +66,7 @@ public class Main {
             System.out.println("  " + word + ": " + count + " occurrences"));
     }
     
-    private static void runSearchInterface(Scanner scanner, InvertedIndex invertedIndex) {
+    private static void runSearchInterface(Scanner scanner, SearchEngine searchEngine) {
         System.out.println("\n=================================");
         System.out.println("         SEARCH INTERFACE        ");
         System.out.println("=================================");
@@ -81,22 +83,22 @@ public class Main {
             if (!query.isEmpty()) {
                 boolean isPhrase = query.contains(" ");
                 
-                List<InvertedIndex.SearchResult> results;
+                List<SearchEngine.SearchResult> results;
                 if (isPhrase) {
                     // Phrase search in both title and body
-                    results = invertedIndex.searchPhrase(query, true, true);
+                    results = searchEngine.search(query, true, true);
                     System.out.println("Performing phrase search...");
                 } else {
                     // Single term search in both
-                    results = invertedIndex.search(query, true, true);
+                    results = searchEngine.search(query, true, true);
                 }
                 
                 if (results.isEmpty()) {
                     System.out.println("No results found for '" + query + "'");
                 } else {
                     System.out.println("Found " + results.size() + " result(s):");
-                    for (int i = 0; i < Math.min(5, results.size()); i++) {
-                        InvertedIndex.SearchResult result = results.get(i);
+                    for (int i = 0; i < Math.min(50, results.size()); i++) {
+                        SearchEngine.SearchResult result = results.get(i);
                         System.out.println((i + 1) + ". " + result.getUrl() + 
                                          " (score: " + String.format("%.3f", result.getScore()) + ")");
                         System.out.println("   Title: " + result.getTitle());
