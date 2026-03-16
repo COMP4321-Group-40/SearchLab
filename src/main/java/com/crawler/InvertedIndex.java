@@ -86,7 +86,7 @@ public class InvertedIndex {
         return childToParents.getOrDefault(pageId, Collections.emptySet());
     }
 
-        public Set<Integer> getAllPageIds() {
+    public Set<Integer> getAllPageIds() {
         return idToUrl.keySet();
     }
 

@@ -43,7 +43,7 @@ public class Main {
             
             // Search interface
             runSearchInterface(scanner, searchEngine);
-https://www.cse.ust.hk/~kwtleung/COMP4321/testpage.htm
+            
             scanner.close();
             
         } catch (Exception e) {

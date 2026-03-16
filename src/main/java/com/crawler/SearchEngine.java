@@ -8,9 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Handles query processing, ranking, and retrieval using vector space model.
- */
+
 public class SearchEngine {
     private final InvertedIndex index;
     private final StopStem stemmer;
@@ -23,10 +21,7 @@ public class SearchEngine {
         this.stemmer = stemmer;
     }
     
-    /**
-     * Precompute document vector lengths (norms) for cosine similarity.
-     * Must be called after crawling and before any searches.
-     */
+    // Precompute document vector lengths (norms) for cosine similarity.
     public void computeNorms() {
         docNorm.clear();
         int totalDocs = index.getTotalDocuments();
@@ -59,7 +54,7 @@ public class SearchEngine {
                     double tf = positions.size();
                     double normTf = tf / maxBodyTf;
                     double idf = idfBody.get(term);
-                    double weight = normTf * idf;
+                    double weight = (0.5 + 0.5 * normTf) * idf;
                     sumSq += weight * weight;
                 }
             }
@@ -72,7 +67,7 @@ public class SearchEngine {
                     double tf = positions.size();
                     double normTf = tf / maxTitleTf;
                     double idf = idfTitle.get(term);
-                    double weight = normTf * idf * TITLE_BOOST;
+                    double weight = (0.5 + 0.5 * normTf) * idf * TITLE_BOOST;
                     sumSq += weight * weight;
                 }
             }
@@ -81,13 +76,7 @@ public class SearchEngine {
         normsComputed = true;
     }
     
-    /**
-     * Public search method.
-     * @param query raw query string
-     * @param searchTitle whether to search in titles
-     * @param searchBody whether to search in body
-     * @return list of top 50 results sorted by relevance
-     */
+    // Public search with query
     public List<SearchResult> search(String query, boolean searchTitle, boolean searchBody) {
         if (!normsComputed) {
             throw new IllegalStateException("Norms not computed. Call computeNorms() after crawling.");
