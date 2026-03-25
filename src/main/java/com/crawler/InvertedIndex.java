@@ -166,12 +166,32 @@ public class InvertedIndex {
     }
 
     // ===== Getters =====
-    protected Map<String, Map<String, List<Integer>>> getBodyIndex() { return bodyIndex; }
-    protected Map<String, Map<String, List<Integer>>> getTitleIndex() { return titleIndex; }
-    protected Map<String, DocumentInfo> getDocuments() { return documents; }
+    public Map<String, Map<String, List<Integer>>> getBodyIndex() { return bodyIndex; }
+    public Map<String, Map<String, List<Integer>>> getTitleIndex() { return titleIndex; }
+    public Map<String, DocumentInfo> getDocuments() { return documents; }
     protected Map<String, Integer> getDocMaxTfBody() { return docMaxTfBody; }
     protected Map<String, Integer> getDocMaxTfTitle() { return docMaxTfTitle; }
     protected int getTotalDocuments() { return totalDocuments; }
+
+    public String getFormattedLastModified(String url) {
+        Long timestamp = getLastModified(url);
+        if (timestamp == null) return "Unknown";
+        return new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(timestamp));
+    }
+    public List<String> getChildUrls(String parentUrl, int limit) {
+        Integer parentId = urlToId.get(parentUrl);
+        if (parentId == null) return Collections.emptyList();
+        Set<Integer> childIds = getChildren(parentId);
+        if (childIds == null || childIds.isEmpty()) return Collections.emptyList();
+        
+        List<String> childUrls = new ArrayList<>();
+        for (int childId : childIds) {
+            String childUrl = idToUrl.get(childId);
+            if (childUrl != null) childUrls.add(childUrl);
+            if (limit >= 0 && childUrls.size() >= limit) break;
+        }
+        return childUrls;
+    }
     
 
     protected static class DocumentInfo {

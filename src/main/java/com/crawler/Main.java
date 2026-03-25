@@ -1,7 +1,9 @@
 package com.crawler;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +42,8 @@ public class Main {
             
             // Display results
             displayResults(invertedIndex, crawler);
+
+            writeSpiderReport(invertedIndex);
             
             // Search interface
             runSearchInterface(scanner, searchEngine);
@@ -106,5 +110,78 @@ public class Main {
                 }
             }
         }
+    }
+
+    private static void writeSpiderReport(InvertedIndex index) {
+        String filename = "spider_result.txt";
+        try (java.io.PrintWriter out = new java.io.PrintWriter(new java.io.FileWriter(filename))) {
+            Set<String> urls = index.getDocuments().keySet();
+            for (String url : urls) {
+                // Get document info
+                InvertedIndex.DocumentInfo docInfo = index.getDocuments().get(url);
+                String title = docInfo.getTitle();
+                int pageSize = docInfo.getBodyLength();
+                String lastMod = index.getFormattedLastModified(url);
+                
+                // Get top 10 keywords with frequencies
+                Map<String, Integer> keywordFreq = computeKeywordFrequencies(index, url);
+                List<Map.Entry<String, Integer>> topKeywords = keywordFreq.entrySet().stream()
+                        .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
+                        .limit(10)
+                        .collect(java.util.stream.Collectors.toList());
+                
+                // Get child links (up to 10)
+                List<String> childLinks = index.getChildUrls(url, 10);
+                
+                // Write to file
+                out.println(title);
+                out.println(url);
+                out.println(lastMod + ", " + pageSize);
+                // Keyword line: keyword1 freq1; keyword2 freq2; ...
+                if (!topKeywords.isEmpty()) {
+                    StringBuilder kwLine = new StringBuilder();
+                    for (Map.Entry<String, Integer> entry : topKeywords) {
+                        kwLine.append(entry.getKey()).append(" ").append(entry.getValue()).append("; ");
+                    }
+                    out.println(kwLine.toString().trim());
+                } else {
+                    out.println();
+                }
+                // Child links
+                if (!childLinks.isEmpty()) {
+                    for (String childUrl : childLinks) {
+                        out.println(childUrl);
+                    }
+                }
+                out.println(); // blank line between pages
+            }
+            System.out.println("Report written to " + filename);
+        } catch (java.io.IOException e) {
+            System.err.println("Error writing report: " + e.getMessage());
+        }
+    }
+
+    private static Map<String, Integer> computeKeywordFrequencies(InvertedIndex index, String url) {
+        Map<String, Integer> freq = new java.util.HashMap<>();
+        // Iterate over all terms in body index
+        for (Map.Entry<String, Map<String, List<Integer>>> termEntry : index.getBodyIndex().entrySet()) {
+            String term = termEntry.getKey();
+            Map<String, List<Integer>> postings = termEntry.getValue();
+            List<Integer> positions = postings.get(url);
+            if (positions != null) {
+                freq.put(term, positions.size());
+            }
+        }
+
+        // Iterate over all terms in title index
+        for (Map.Entry<String, Map<String, List<Integer>>> termEntry : index.getTitleIndex().entrySet()) {
+            String term = termEntry.getKey();
+            Map<String, List<Integer>> postings = termEntry.getValue();
+            List<Integer> positions = postings.get(url);
+            if (positions != null) {
+                freq.merge(term, positions.size(), Integer::sum);
+            }
+        }
+        return freq;
     }
 }
